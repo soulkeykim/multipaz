@@ -64,7 +64,6 @@ import net.minidev.json.JSONObject
 import net.minidev.json.JSONStyle
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Encoding
-import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.ASN1TagClass
 import org.multipaz.asn1.ASN1TaggedObject
@@ -78,7 +77,7 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
-import org.multipaz.crypto.buildX509Cert
+import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.Loyalty
@@ -104,7 +103,6 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
-import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
 import org.multipaz.verification.VerificationUtil
 import java.net.URLEncoder
@@ -240,6 +238,7 @@ private data class DCBeginRequest(
     val format: String,
     val docType: String,
     val requestId: String,
+    val rawDcql: String,
     val protocol: String,
     val origin: String,
     val host: String,
@@ -263,7 +262,8 @@ private data class DCBeginResponse(
     val dcRequestProtocol: String,
     val dcRequestString: String,
     val dcRequestProtocol2: String?,
-    val dcRequestString2: String?
+    val dcRequestString2: String?,
+    val error: String? = null
 )
 
 @Serializable
@@ -433,7 +433,7 @@ private fun lookupWellknownRequest(
     format: String,
     docType: String,
     requestId: String
-): DocumentCannedRequest {
+): SingleDocumentCannedRequest {
     return when (format) {
         "mdoc" -> documentTypeRepo.getDocumentTypeForMdoc(docType)!!.cannedRequests.first { it.id == requestId}
         "vc" -> documentTypeRepo.getDocumentTypeForJson(docType)!!.cannedRequests.first { it.id == requestId}
@@ -448,6 +448,7 @@ private suspend fun handleDcBegin(
     val requestString = String(requestData, 0, requestData.size, Charsets.UTF_8)
     val request = Json.decodeFromString<DCBeginRequest>(requestString)
     Logger.i(TAG, "format ${request.format} protocol ${request.protocol}")
+    Logger.i(TAG, "rawDcql ${request.rawDcql}")
 
     val protocol = when (request.protocol) {
         // Keep in sync with verifier.html
@@ -482,65 +483,99 @@ private suspend fun handleDcBegin(
         expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
     )
 
-    val readerAuthKey = createSingleUseReaderKey(session.host)
+    try {
+        val readerAuthKey = createSingleUseReaderKey(session.host)
 
-    // Uncomment when making test vectors...
-    //Logger.iCbor(TAG, "readerKey: ", Cbor.encode(session.encryptionKey.toCoseKey().toDataItem()))
+        // Uncomment when making test vectors...
+        //Logger.iCbor(TAG, "readerKey: ", Cbor.encode(session.encryptionKey.toCoseKey().toDataItem()))
 
-    // Prefer using new VerificationUtil.generateDcRequestMdoc() and generateDcRequestSdJwt() functions
-    // if possible...
-    val openid29 = if (request.signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
-    val exchangeProtocols = when (request.protocol) {
-        // Keep in sync with verifier.html
-        "w3c_dc_mdoc_api" -> listOf("org-iso-mdoc")
-        "w3c_dc_openid4vp_24" -> listOf("openid4vp")
-        "w3c_dc_openid4vp_29" -> listOf(openid29)
-        "w3c_dc_openid4vp_29_and_mdoc_api" -> listOf(openid29, "org-iso-mdoc")
-        "w3c_dc_openid4vp_24_and_mdoc_api" -> listOf("openid4vp", "org-iso-mdoc")
-        "w3c_dc_mdoc_api_and_openid4vp_29" -> listOf("org-iso-mdoc", openid29)
-        "w3c_dc_mdoc_api_and_openid4vp_24" -> listOf("org-iso-mdoc", "openid4vp")
-        else -> null
-    }
-    val beginResponse = if (exchangeProtocols != null) {
-        calcDcRequestNew(
-            exchangeProtocols,
-            sessionId,
-            documentTypeRepo,
-            request.format,
-            session,
-            lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId),
-            session.protocol,
-            session.nonce,
-            session.origin,
-            session.encryptionKey,
-            session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
-            readerAuthKey,
-            request.signRequest,
-            request.encryptResponse,
+        // Prefer using new VerificationUtil.generateDcRequestMdoc() and generateDcRequestSdJwt() functions
+        // if possible...
+        val openid29 = if (request.signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
+        val exchangeProtocols = when (request.protocol) {
+            // Keep in sync with verifier.html
+            "w3c_dc_mdoc_api" -> listOf("org-iso-mdoc")
+            "w3c_dc_openid4vp_24" -> listOf("openid4vp")
+            "w3c_dc_openid4vp_29" -> listOf(openid29)
+            "w3c_dc_openid4vp_29_and_mdoc_api" -> listOf(openid29, "org-iso-mdoc")
+            "w3c_dc_openid4vp_24_and_mdoc_api" -> listOf("openid4vp", "org-iso-mdoc")
+            "w3c_dc_mdoc_api_and_openid4vp_29" -> listOf("org-iso-mdoc", openid29)
+            "w3c_dc_mdoc_api_and_openid4vp_24" -> listOf("org-iso-mdoc", "openid4vp")
+            else -> null
+        }
+        val beginResponse = if (exchangeProtocols != null) {
+            if (request.rawDcql.isNotEmpty()) {
+                calcDcRequestNewRawDcql(
+                    request.rawDcql,
+                    exchangeProtocols,
+                    sessionId,
+                    documentTypeRepo,
+                    session,
+                    session.nonce,
+                    session.origin,
+                    session.encryptionKey,
+                    session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
+                    readerAuthKey,
+                    request.signRequest,
+                    request.encryptResponse,
+                )
+            } else {
+                calcDcRequestNew(
+                    exchangeProtocols,
+                    sessionId,
+                    documentTypeRepo,
+                    request.format,
+                    session,
+                    lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId),
+                    session.protocol,
+                    session.nonce,
+                    session.origin,
+                    session.encryptionKey,
+                    session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
+                    readerAuthKey,
+                    request.signRequest,
+                    request.encryptResponse,
+                )
+            }
+        } else {
+            calcDcRequest(
+                sessionId,
+                documentTypeRepo,
+                request.format,
+                session,
+                lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId),
+                session.protocol,
+                session.nonce,
+                session.origin,
+                session.encryptionKey,
+                session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
+                readerAuthKey,
+                request.signRequest,
+                request.encryptResponse,
+            )
+        }
+        Logger.i(TAG, "beginResponse: $beginResponse")
+        val json = Json { ignoreUnknownKeys = true }
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = json.encodeToString(beginResponse)
         )
-    } else {
-         calcDcRequest(
-            sessionId,
-            documentTypeRepo,
-            request.format,
-            session,
-            lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId),
-            session.protocol,
-            session.nonce,
-            session.origin,
-            session.encryptionKey,
-            session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
-            readerAuthKey,
-            request.signRequest,
-            request.encryptResponse,
+    } catch (e: Throwable) {
+        val beginResponse = DCBeginResponse(
+            sessionId = sessionId,
+            dcRequestProtocol = "",
+            dcRequestString = "",
+            dcRequestProtocol2 = null,
+            dcRequestString2 = null,
+            error = "${e.message}\n\n${e.stackTraceToString()}"
+        )
+        val json = Json { ignoreUnknownKeys = true }
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = json.encodeToString(beginResponse)
         )
     }
-    Logger.i(TAG, "beginResponse: $beginResponse")
-    val json = Json { ignoreUnknownKeys = true }
-    call.respondText(
-        contentType = ContentType.Application.Json,
-        text = json.encodeToString(beginResponse)
-    )
+
 }
 
 private suspend fun handleDcBeginRawDcql(
@@ -1437,7 +1472,7 @@ private suspend fun calcDcRequest(
     documentTypeRepository: DocumentTypeRepository,
     format: String,
     session: Session,
-    request: DocumentCannedRequest,
+    request: SingleDocumentCannedRequest,
     protocol: Protocol,
     nonce: ByteString,
     origin: String,
@@ -1647,13 +1682,56 @@ private suspend fun calcDcRequest(
     }
 }
 
+private suspend fun calcDcRequestNewRawDcql(
+    rawDcql: String,
+    exchangeProtocols: List<String>,
+    sessionId: String,
+    documentTypeRepository: DocumentTypeRepository,
+    session: Session,
+    nonce: ByteString,
+    origin: String,
+    readerKey: EcPrivateKey,
+    readerPublicKey: EcPublicKeyDoubleCoordinate,
+    readerAuthKey: AsymmetricKey.X509Certified,
+    signRequest: Boolean,
+    encryptResponse: Boolean,
+): DCBeginResponse {
+    val request = VerificationUtil.generateDcRequestDcql(
+        exchangeProtocols = exchangeProtocols,
+        dcql = Json.decodeFromString<JsonObject>(rawDcql),
+        nonce = nonce,
+        origin = origin,
+        clientId = "x509_san_dns:${session.host}",
+        responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
+        readerAuthenticationKey = readerAuthKey,
+    )
+
+    val dcRequestProtocol = request["requests"]!!.jsonArray[0].jsonObject["protocol"]!!.jsonPrimitive.content
+    val dcRequestString = Json.encodeToString(request["requests"]!!.jsonArray[0].jsonObject["data"]!!.jsonObject)
+    val (dcRequestProtocol2, dcRequestString2) = if (request["requests"]!!.jsonArray.size > 1) {
+        Pair(
+            request["requests"]!!.jsonArray[1].jsonObject["protocol"]!!.jsonPrimitive.content,
+            Json.encodeToString(request["requests"]!!.jsonArray[1].jsonObject["data"]!!.jsonObject)
+        )
+    } else {
+        Pair(null, null)
+    }
+    return DCBeginResponse(
+        sessionId = sessionId,
+        dcRequestProtocol = dcRequestProtocol,
+        dcRequestString = dcRequestString,
+        dcRequestProtocol2 = dcRequestProtocol2,
+        dcRequestString2 = dcRequestString2
+    )
+}
+
 private suspend fun calcDcRequestNew(
     exchangeProtocols: List<String>,
     sessionId: String,
     documentTypeRepository: DocumentTypeRepository,
     format: String,
     session: Session,
-    request: DocumentCannedRequest,
+    request: SingleDocumentCannedRequest,
     protocol: Protocol,
     nonce: ByteString,
     origin: String,
@@ -1770,7 +1848,7 @@ private suspend fun calcDcRequestStringOpenID4VP(
     documentTypeRepository: DocumentTypeRepository,
     format: String,
     session: Session,
-    request: DocumentCannedRequest,
+    request: SingleDocumentCannedRequest,
     nonce: ByteString,
     origin: String,
     readerKey: EcPrivateKey,
@@ -1869,7 +1947,7 @@ private suspend fun calcDcRequestStringOpenID4VP(
 
 private suspend fun mdocCalcDcRequestStringMdocApi(
     documentTypeRepository: DocumentTypeRepository,
-    request: DocumentCannedRequest,
+    request: SingleDocumentCannedRequest,
     nonce: ByteString,
     origin: String,
     readerKey: EcPrivateKey,

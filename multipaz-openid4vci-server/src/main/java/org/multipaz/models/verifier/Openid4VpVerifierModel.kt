@@ -25,7 +25,6 @@ import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey

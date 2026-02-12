@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,11 +25,11 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -53,7 +53,6 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.iterator
@@ -64,7 +63,7 @@ import kotlin.time.Instant
 /**
  * Test harness for DocumentStore and related types.
  *
- * This provides a test harness for [DocumentStore], [Document], and [Credential]
+ * This provides a test harness for [org.multipaz.document.DocumentStore], [org.multipaz.document.Document], and [Credential]
  * which can be used to test functionality sitting on top of these.
  *
  * Creating a [DocumentStoreTestHarness] is a no-op, call [initialize] to actually
@@ -104,11 +103,11 @@ class DocumentStoreTestHarness {
      * Initializes the [DocumentStoreTestHarness].
      *
      * This creates [documentStore] and with give documents [docMdl], [docPhotoId], [docPhotoId2],
-     * [docEuPid], [docEuPid2], all populated with sample data. Each document will have one [MdocCredential]
-     * in the domain `mdoc` and the EU PIDs will also have a [KeyBoundSdJwtVcCredential]
+     * [docEuPid], [docEuPid2], all populated with sample data. Each document will have one [org.multipaz.mdoc.credential.MdocCredential]
+     * in the domain `mdoc` and the EU PIDs will also have a [org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential]
      * in the domain `sdjwt`.
      *
-     * The [DocumentStore] itself is backed by [EphemeralStorage] and each credential is using
+     * The [DocumentStore] itself is backed by [org.multipaz.storage.ephemeral.EphemeralStorage] and each credential is using
      * a single [SoftwareSecureArea].
      *
      * This method can be called multiple times.
@@ -130,12 +129,13 @@ class DocumentStoreTestHarness {
 
         storage = EphemeralStorage()
 
-        softwareSecureArea = SoftwareSecureArea.create(storage)
+        softwareSecureArea = SoftwareSecureArea.Companion.create(storage)
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(softwareSecureArea)
             .build()
 
-        documentStore = buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
+        documentStore =
+            buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
 
         presentmentSource = SimplePresentmentSource(
             documentStore = documentStore,
@@ -157,7 +157,7 @@ class DocumentStoreTestHarness {
         val dsValidFrom = validFrom
         val dsValidUntil = validUntil
 
-        val iacaKeyPub = EcPublicKey.fromPem(
+        val iacaKeyPub = EcPublicKey.Companion.fromPem(
             """
                     -----BEGIN PUBLIC KEY-----
                     MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+QDye70m2O0llPXMjVjxVZz3m5k6agT+
@@ -166,7 +166,7 @@ class DocumentStoreTestHarness {
                     -----END PUBLIC KEY-----
                 """.trimIndent().trim(),
         )
-        val iacaKey = EcPrivateKey.fromPem(
+        val iacaKey = EcPrivateKey.Companion.fromPem(
             """
                     -----BEGIN PRIVATE KEY-----
                     MIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDCcRuzXW3pW2h9W8pu5
@@ -179,9 +179,9 @@ class DocumentStoreTestHarness {
         )
 
         val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = AsymmetricKey.anonymous(iacaKey),
-            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
-            serial = ASN1Integer.fromRandom(numBits = 128),
+            iacaKey = AsymmetricKey.Companion.anonymous(iacaKey),
+            subject = X500Name.Companion.fromName("C=US,CN=OWF Multipaz TEST IACA"),
+            serial = ASN1Integer.Companion.fromRandom(numBits = 128),
             validFrom = iacaValidFrom,
             validUntil = iacaValidUntil,
             issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
@@ -192,8 +192,8 @@ class DocumentStoreTestHarness {
         val dsCert = MdocUtil.generateDsCertificate(
             iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey),
             dsKey = dsPrivateKey.publicKey,
-            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
-            serial = ASN1Integer.fromRandom(numBits = 128),
+            subject = X500Name.Companion.fromName("C=US,CN=OWF Multipaz TEST DS"),
+            serial = ASN1Integer.Companion.fromRandom(numBits = 128),
             validFrom = dsValidFrom,
             validUntil = dsValidUntil,
         )
@@ -203,9 +203,9 @@ class DocumentStoreTestHarness {
         val readerRootValidUntil = validUntil
         val readerRootPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val readerRootCert = MdocUtil.generateReaderRootCertificate(
-            readerRootKey = AsymmetricKey.anonymous(readerRootPrivateKey),
-            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
-            serial = ASN1Integer.fromRandom(128),
+            readerRootKey = AsymmetricKey.Companion.anonymous(readerRootPrivateKey),
+            subject = X500Name.Companion.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
+            serial = ASN1Integer.Companion.fromRandom(128),
             validFrom = readerRootValidFrom,
             validUntil = readerRootValidUntil,
             crlUrl = "https://verifier.multipaz.org/crl"
@@ -345,7 +345,7 @@ class DocumentStoreTestHarness {
             overrideMdocClaims = mapOf(
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name") to Tstr("Erika"),
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "sex") to Uint(2UL),
-                Pair(PhotoID.ISO_23220_2_NAMESPACE, "age_over_25") to Simple.FALSE
+                Pair(PhotoID.ISO_23220_2_NAMESPACE, "age_over_25") to Simple.Companion.FALSE
             ),
             overrideJsonClaims = emptyMap(),
             signedAt = signedAt,
@@ -360,7 +360,7 @@ class DocumentStoreTestHarness {
             overrideMdocClaims = mapOf(
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name") to Tstr("Max"),
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "sex") to Uint(1UL),
-                Pair(PhotoID.ISO_23220_2_NAMESPACE, "age_over_25") to Simple.TRUE
+                Pair(PhotoID.ISO_23220_2_NAMESPACE, "age_over_25") to Simple.Companion.TRUE
             ),
             overrideJsonClaims = emptyMap(),
             signedAt = signedAt,
@@ -460,7 +460,7 @@ class DocumentStoreTestHarness {
         dsKey: AsymmetricKey.X509Certified,
     ) {
         // Create authentication keys...
-        val mdocCredential = MdocCredential.create(
+        val mdocCredential = MdocCredential.Companion.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "mdoc",
@@ -481,9 +481,11 @@ class DocumentStoreTestHarness {
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
         )
-        val taggedEncodedMso = Cbor.encode(Tagged(
-            Tagged.ENCODED_CBOR,
-            Bstr(Cbor.encode(mso.toDataItem())))
+        val taggedEncodedMso = Cbor.encode(
+            Tagged(
+                Tagged.Companion.ENCODED_CBOR,
+                Bstr(Cbor.encode(mso.toDataItem()))
+            )
         )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
@@ -575,7 +577,7 @@ class DocumentStoreTestHarness {
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
     ) {
-        val credential = KeyBoundSdJwtVcCredential.create(
+        val credential = KeyBoundSdJwtVcCredential.Companion.create(
             document = document,
             asReplacementForIdentifier = null,
             domain = "sdjwt",
@@ -584,7 +586,7 @@ class DocumentStoreTestHarness {
             createKeySettings = SoftwareCreateKeySettings.Builder().build()
         )
 
-        val sdJwt = SdJwt.create(
+        val sdJwt = SdJwt.Companion.create(
             issuerKey = dsKey,
             kbKey = (credential as? SecureAreaBoundCredential)?.let { it.secureArea.getKeyInfo(it.alias).publicKey },
             claims = identityAttributes,

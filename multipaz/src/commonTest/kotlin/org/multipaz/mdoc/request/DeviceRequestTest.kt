@@ -26,6 +26,7 @@ import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
