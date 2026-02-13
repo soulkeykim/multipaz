@@ -2,12 +2,23 @@ package org.multipaz.web
 
 import react.create
 import react.dom.client.createRoot
-import web.dom.ElementId
+import web.cssom.ClassName
 import web.dom.document
 
+// Map class names to app implementations
+private val apps = mapOf(
+    "multipaz-verifier" to VerifierApp,
+    "multipaz-hello" to HelloApp
+)
+
 fun main() {
-    val rootElement = document.getElementById(ElementId("root"))
-        ?: error("Could not find root element")
-    
-    createRoot(rootElement).render(App.create())
+    for (appEntry in apps) {
+        val elements = document.getElementsByClassName(ClassName(appEntry.key))
+        for (index in 0..<elements.length) {
+            val element = elements[index]
+            createRoot(element).render(appEntry.value.create {
+                definition = element
+            })
+        }
+    }
 }

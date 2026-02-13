@@ -1,10 +1,14 @@
 package org.multipaz.openid
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -90,6 +94,7 @@ object OpenID4VP {
         responseMode: ResponseMode,
         responseUri: String?,
         dclqQuery: JsonObject,
+        transactionData: List<String> = listOf()
     ): JsonObject {
         if (version == Version.DRAFT_24) {
             return generateRequestDraft24(
@@ -157,6 +162,11 @@ object OpenID4VP {
                         }
                     }
                 }
+            }
+            if (transactionData.isNotEmpty()) {
+                put("transaction_data", JsonArray(transactionData.map {
+                    JsonPrimitive(it)
+                }))
             }
         }
 
@@ -401,6 +411,26 @@ object OpenID4VP {
             origin = origin
         )
 
+        val transactionDataMap = request["transaction_data"]?.jsonArray?.let { transactionData ->
+            buildMap {
+                for(encodedString in transactionData) {
+                    val encoded = encodedString.jsonPrimitive.content
+                    val jsonText = encoded.fromBase64Url().decodeToString()
+                    val data = Json.parseToJsonElement(jsonText).jsonObject
+                    val type = data["type"]!!.jsonPrimitive.content
+                    if (type != "multipaz_test") {
+                        throw IllegalArgumentException("Unsupported transaction type: '$type'")
+                    }
+                    // TODO: support transaction_data_hashes_alg
+                    val hash = Crypto.digest(Algorithm.SHA256, encoded.encodeToByteArray())
+                    val parsed = TransactionData(ByteString(hash), type, data)
+                    for (id in data["credential_ids"]!!.jsonArray) {
+                        getOrPut(id.jsonPrimitive.content) { mutableListOf() }.add(parsed)
+                    }
+                }
+            }
+        }
+        // TODO: incorporate transaction data into the consent prompt
         val selection = source.showConsentPrompt(
             requester,
             source.resolveTrust(requester),
@@ -438,7 +468,8 @@ object OpenID4VP {
                     origin = origin,
                     clientId = clientId,
                     nonce = nonce,
-                    responseMode = responseMode
+                    responseMode = responseMode,
+                    transactionData = transactionDataMap?.get(match.credentialQuery.id)
                 )
             } else {
                 throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
@@ -638,6 +669,7 @@ object OpenID4VP {
         clientId: String,
         nonce: String,
         responseMode: ResponseMode,
+        transactionData: List<TransactionData>?
     ): String {
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
         val claims = match.credentialQuery.claims as List<JsonRequestedClaim>
@@ -667,10 +699,17 @@ object OpenID4VP {
                 } else {
                     clientId
                 },
-                creationTime = Clock.System.now()
+                creationTime = Clock.System.now(),
+                transactionDataHashes = transactionData?.map { it.hash.toByteArray().toBase64Url() }
             ).compactSerialization
         } else {
             filteredSdJwt.compactSerialization
         }
     }
+
+    class TransactionData(
+        val hash: ByteString,
+        val type: String,
+        val data: JsonObject
+    )
 }

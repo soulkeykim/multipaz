@@ -18,7 +18,7 @@ import web.cssom.*
 
 private val scope = MainScope()
 
-val App = FC<Props> {
+val HelloApp = FC<MultipazProps> { props ->
     var hashResult by useState<String?>(null)
     var isComputing by useState(false)
     var error by useState<String?>(null)

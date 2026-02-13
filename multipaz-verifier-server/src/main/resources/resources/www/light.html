@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="referrer" content="unsafe-url">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OWF Multipaz Verifier</title>
+    <script src="verify_credentials.js"></script>
+    <script src="light.js"></script>
+    <link rel="stylesheet" href="light.css">
+</head>
+<body>
+<!--
+{
+  "credentials": [
+    {
+      "id": "mDL",
+      "format": "mso_mdoc",
+      "meta": {
+        "doctype_value": "org.iso.18013.5.1.mDL"
+      },
+      "claims": [
+        {
+          "id": "allowed",
+          "path": [
+            "org.iso.18013.5.1",
+            "age_over_21"
+          ]
+        },
+        {
+          "id": "photo",
+          "path": [
+            "org.iso.18013.5.1",
+            "portrait"
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+{
+  "credentials": [
+    {
+      "id": "pid",
+      "format": "dc+sd-jwt",
+      "meta": {
+        "vct_values": ["urn:eudi:pid:1"]
+      },
+      "claims": [
+        {
+          "path": [
+            "age_equal_or_over",
+            "18"
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+-->
+
+<label>Query:<br/>
+<textarea id="query" rows="20" cols="80">
+{
+  "credentials": [
+    {
+      "id": "pid",
+      "format": "dc+sd-jwt",
+      "meta": {
+        "vct_values": ["urn:eudi:pid:1"]
+      },
+      "claims": [
+        {
+          "path": [
+            "age_equal_or_over",
+            "18"
+          ]
+        }
+      ]
+    }
+  ]
+}
+</textarea>
+</label>
+<br/>
+<button onclick="run()">Submit</button>
+<div id="result">
+
+</div>
+</body>
+</html>
