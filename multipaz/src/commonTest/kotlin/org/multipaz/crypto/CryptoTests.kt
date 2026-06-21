@@ -268,6 +268,40 @@ class CryptoTests {
         }
     }
 
+    @Test
+    fun encryptRejectsIncorrectKeySize() = runTest {
+        for ((algorithm, keySize) in aesGcmKeySizes) {
+            if (!Crypto.supportedEncryptionAlgorithms.contains(algorithm)) {
+                continue
+            }
+            assertFailsWith<IllegalArgumentException> {
+                Crypto.encrypt(
+                    algorithm = algorithm,
+                    key = ByteArray(keySize + 1),
+                    nonce = ByteArray(12),
+                    messagePlaintext = "Hello World".encodeToByteArray()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun decryptRejectsIncorrectKeySize() = runTest {
+        for ((algorithm, keySize) in aesGcmKeySizes) {
+            if (!Crypto.supportedEncryptionAlgorithms.contains(algorithm)) {
+                continue
+            }
+            assertFailsWith<IllegalArgumentException> {
+                Crypto.decrypt(
+                    algorithm = algorithm,
+                    key = ByteArray(keySize + 1),
+                    nonce = ByteArray(12),
+                    messageCiphertext = ByteArray(16)
+                )
+            }
+        }
+    }
+
     suspend fun testJwkEncodeDecode(curve: EcCurve) {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
@@ -391,4 +425,12 @@ class CryptoTests {
     fun testUncompressedFromTo_BRAINPOOLP384R1() = runTest { testUncompressedFromTo(EcCurve.BRAINPOOLP384R1) }
     @Test
     fun testUncompressedFromTo_BRAINPOOLP512R1() = runTest { testUncompressedFromTo(EcCurve.BRAINPOOLP512R1) }
+
+    companion object {
+        private val aesGcmKeySizes = mapOf(
+            Algorithm.A128GCM to 16,
+            Algorithm.A192GCM to 24,
+            Algorithm.A256GCM to 32
+        )
+    }
 }

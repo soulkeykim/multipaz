@@ -65,6 +65,7 @@ actual object Crypto {
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        checkAesGcmKeySize(algorithm, key)
         return SwiftBridge.aesGcmEncrypt(
             key.toNSData(),
             messagePlaintext.toNSData(),
@@ -80,6 +81,7 @@ actual object Crypto {
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        checkAesGcmKeySize(algorithm, key)
         val ctLen = messageCiphertext.size
         val ct = messageCiphertext.sliceArray(IntRange(0, ctLen - 16 - 1))
         val tag = messageCiphertext.sliceArray(IntRange(ctLen - 16, ctLen - 1))

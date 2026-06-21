@@ -151,14 +151,7 @@ actual object Crypto {
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
-        when (algorithm) {
-            Algorithm.A128GCM -> {}
-            Algorithm.A192GCM -> {}
-            Algorithm.A256GCM -> {}
-            else -> {
-                throw IllegalArgumentException("Unsupported algorithm $algorithm")
-            }
-        }
+        checkAesGcmKeySize(algorithm, key)
         return Cipher.getInstance("AES/GCM/NoPadding").run {
             init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
             aad?.let { updateAAD(it) }
@@ -184,14 +177,7 @@ actual object Crypto {
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
-        when (algorithm) {
-            Algorithm.A128GCM -> {}
-            Algorithm.A192GCM -> {}
-            Algorithm.A256GCM -> {}
-            else -> {
-                throw IllegalArgumentException("Unsupported algorithm $algorithm")
-            }
-        }
+        checkAesGcmKeySize(algorithm, key)
         return try {
             Cipher.getInstance("AES/GCM/NoPadding").run {
                 init(

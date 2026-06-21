@@ -171,6 +171,7 @@ actual object Crypto {
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        checkAesGcmKeySize(algorithm, key)
         val algorithm = unsafeJso<AesGcmParams> {
             name = "AES-GCM"
             additionalData = (aad ?: byteArrayOf()).toBufferSource()
@@ -199,6 +200,7 @@ actual object Crypto {
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        checkAesGcmKeySize(algorithm, key)
         val algorithm = unsafeJso<AesGcmParams> {
             name = "AES-GCM"
             additionalData = (aad ?: byteArrayOf()).toBufferSource()
